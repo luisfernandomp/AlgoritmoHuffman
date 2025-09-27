@@ -23,6 +23,7 @@ public class Huffman {
             heap.printHeap();
 
             No raiz = montarArvore(heap);
+            imprimirArvore(raiz);
             String[] dicionario = new String[TAM];
             gerarTabelaDeCodigos(dicionario, raiz, "");
 
@@ -87,6 +88,46 @@ public class Huffman {
         return minHeap.peek();
     }
 
+    private static String rotulo(No n, boolean eRaiz) {
+        boolean folha = (n.left == null && n.right == null);
+        if (eRaiz) return "(RAIZ, " + n.frequencie + ")";
+        else if (folha) return "('" + n.character + "', " + n.frequencie + ")";
+        else return "(N, " + n.frequencie + ")";
+    }
+
+    public static void imprimirArvore(No raiz) {
+        System.out.println("\n--------------------------------------------------");
+        System.out.println("ETAPA 3: Impressão da Árvore de Huffman");
+        System.out.println("--------------------------------------------------");
+        
+        imprimirArvoreRec(raiz, "", true, true);
+    }
+
+    private static void imprimirArvoreRec(No n, String prefix, boolean eUltimo, boolean eRaiz) {
+        if (n == null) return;
+
+        boolean folha = (n.left == null && n.right == null);
+        String rotulo = eRaiz ? "(RAIZ, " + n.frequencie + ")"
+                        : (folha ? "('" + n.character + "', " + n.frequencie + ")"
+                                : "(N, " + n.frequencie + ")");
+
+        if (eRaiz) {
+            System.out.println(rotulo);
+        } else {
+            System.out.println(prefix + (eUltimo ? "└── " : "├── ") + rotulo);
+        }
+
+        java.util.List<No> filhos = new java.util.ArrayList<>();
+        if (n.left  != null) filhos.add(n.left);
+        if (n.right != null) filhos.add(n.right);
+
+        for (int i = 0; i < filhos.size(); i++) {
+            boolean ultimo = (i == filhos.size() - 1);
+            String nextPrefix = prefix + (eRaiz ? "" : (eUltimo ? "    " : "│   "));
+            imprimirArvoreRec(filhos.get(i), nextPrefix, ultimo, false);
+        }
+    }
+
     public static void gerarTabelaDeCodigos(String[] dicionario, No raiz, String caminho) {
         if(raiz.left  == null && raiz.right == null) {
             dicionario[(int)raiz.character] = caminho;
@@ -121,10 +162,6 @@ public class Huffman {
 
     public static void decodificar() {
         //TODO: Implementar método para decodificar
-    }
-
-    public static void imprimirArvore(No raiz) {
-        //TODO : Implementar método para exibir árvore
     }
 
     public static void imprimirResumoCompressao(){
