@@ -7,6 +7,13 @@ import java.nio.charset.StandardCharsets;
 public class Huffman {
     private static final int TAM = 256;
 
+    // para o método codificar
+    private static No raizGlobal = null;
+    private static String[] dicionarioGlobal = null;
+    private static String bitsCodificadosGlobal = null;
+    private static long originalBits = 0L;
+    private static long comprimidoBits = 0L;
+
     public static void main(String[] args) {
         // análise de frequência e heap
         int[] frequencies = analyze("input.txt");
@@ -28,6 +35,12 @@ public class Huffman {
             gerarTabelaDeCodigos(dicionario, raiz, "");
 
             imprimirTabelaDeCodigos(dicionario);
+
+            raizGlobal = raiz;
+            dicionarioGlobal = dicionario;
+            codificar();
+
+            imprimirResumoCompressao();
         }
     }
 
@@ -157,7 +170,33 @@ public class Huffman {
     }
 
     public static void codificar() {
-        //TODO: Implementar método para codificar
+        if (dicionarioGlobal == null) {
+            System.out.println("Dicionário não gerado");
+            return;
+        }
+
+        StringBuilder sb = new StringBuilder( 1 << 12);
+        long qtdChars = 0;
+
+        try (FileInputStream fileInputStream = new FileInputStream("input.txt");
+             InputStreamReader inputStreamReader = new InputStreamReader(fileInputStream, StandardCharsets.UTF_8);
+             BufferedReader leitor = new BufferedReader(inputStreamReader)) {
+
+            int caractereLido;
+            while ((caractereLido = leitor.read()) != -1) {
+                if(caractereLido >= 0 && caractereLido < TAM){
+                    sb.append(dicionarioGlobal[caractereLido]);
+                    qtdChars++;
+                }
+            }
+        } catch (IOException e) {
+            e.printStackTrace();
+            return;
+        }
+
+        bitsCodificadosGlobal = sb.toString();
+        originalBits = qtdChars * 8L;
+        comprimidoBits = bitsCodificadosGlobal.length();
     }
 
     public static void decodificar() {
@@ -165,6 +204,21 @@ public class Huffman {
     }
 
     public static void imprimirResumoCompressao(){
-        //TODO : Implementar método para exibir resumo compressão
+        if (bitsCodificadosGlobal == null) {
+            System.out.println("Nenhum dado codificado");
+            return;
+        }
+
+        StringBuilder sb = new StringBuilder();
+
+        sb.append("\n--------------------------------------------------");
+        sb.append("\nETAPA 5: Resumo da Compressão");
+        sb.append("\n--------------------------------------------------");
+        sb.append(String.format("\nTamanho do arquivo original: %d bits", originalBits));
+        sb.append(String.format("\nTamanho do arquivo comprimido: %d bits", comprimidoBits));
+        //TODO: taxa de compressão
+        sb.append("\n--------------------------------------------------");
+
+        System.out.println(sb.toString());
     }
 }
