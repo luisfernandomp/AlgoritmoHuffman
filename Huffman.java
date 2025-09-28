@@ -14,6 +14,9 @@ public class Huffman {
     private static long originalBits = 0L;
     private static long comprimidoBits = 0L;
 
+    // para o decodificador
+    private static String mensagemDecodificadaGlobal = null;
+
     public static void main(String[] args) {
         // análise de frequência e heap
         int[] frequencies = analyze("input.txt");
@@ -200,7 +203,34 @@ public class Huffman {
     }
 
     public static void decodificar() {
-        //TODO: Implementar método para decodificar
+        if (raizGlobal == null || bitsCodificadosGlobal == null) {
+            mensagemDecodificadaGlobal = null;
+            return;
+        }
+
+        StringBuilder saida = new StringBuilder();
+
+        // só um símbolo na árvore
+        if (raizGlobal.left == null && raizGlobal.right == null) {
+            for (int i = 0; i < bitsCodificadosGlobal.length(); i++) {
+                saida.append(raizGlobal.character);
+            }
+            mensagemDecodificadaGlobal = saida.toString();
+            return;
+        }
+
+        No atual = raizGlobal;
+        for (int i = 0; i < bitsCodificadosGlobal.length(); i++) {
+            char b = bitsCodificadosGlobal.charAt(i);
+            atual = (b == '0') ? atual.left : atual.right;
+
+            if (atual.left == null && atual.right == null) {
+                saida.append(atual.character);
+                atual = raizGlobal; // volta pra raiz
+            }
+        }
+
+        mensagemDecodificadaGlobal = saida.toString();
     }
 
     public static void imprimirResumoCompressao(){
@@ -211,12 +241,16 @@ public class Huffman {
 
         StringBuilder sb = new StringBuilder();
 
+        long bytesOrig = (originalBits + 7) / 8;
+        long bytesComp = (comprimidoBits + 7) / 8;
+        double taxa = (originalBits == 0) ? 0.0 : (1.0 - (comprimidoBits / (double) originalBits)) * 100.0;
+
         sb.append("\n--------------------------------------------------");
         sb.append("\nETAPA 5: Resumo da Compressão");
         sb.append("\n--------------------------------------------------");
-        sb.append(String.format("\nTamanho do arquivo original: %d bits", originalBits));
-        sb.append(String.format("\nTamanho do arquivo comprimido: %d bits", comprimidoBits));
-        //TODO: taxa de compressão
+        sb.append(String.format("\nTamanho do arquivo original: %d bits (%d bytes)", originalBits, bytesOrig));
+        sb.append(String.format("\nTamanho do arquivo comprimido: %d bits (%d btytes)", comprimidoBits, bytesComp));
+        sb.append(String.format("\nTaxa de compressao: %.2f%%", taxa));
         sb.append("\n--------------------------------------------------");
 
         System.out.println(sb.toString());
