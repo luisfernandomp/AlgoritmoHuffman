@@ -1,13 +1,16 @@
-import java.io.BufferedReader;
-import java.io.FileInputStream;
-import java.io.IOException;
-import java.io.InputStreamReader;
+import java.io.*;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.util.Arrays;
 
 public class Huffman {
     private static final int TAM = 256;
+    private static  final String ARQUIVOHUFFCOMPRIMIDO = "arquivo_comprimido.huff";
 
     // para o método codificar
+    private static  MinHeap minHeap;
     private static No raizGlobal = null;
     private static String[] dicionarioGlobal = null;
     private static String bitsCodificadosGlobal = null;
@@ -24,12 +27,7 @@ public class Huffman {
         if(frequencies != null){
             printFrequencies(frequencies);
 
-            MinHeap heap = new MinHeap();
-            for (int i = 0; i < frequencies.length; i++) {
-                if (frequencies[i] > 0) {
-                    heap.insert(new No((char) i, frequencies[i]));
-                }
-            }
+            MinHeap heap = criarMinHeap(frequencies);
             heap.printHeap();
 
             No raiz = montarArvore(heap);
@@ -44,6 +42,8 @@ public class Huffman {
             codificar();
 
             imprimirResumoCompressao();
+            criarArquivoHuff(frequencies);
+            descomprimirArquivo(ARQUIVOHUFFCOMPRIMIDO);
         }
     }
 
@@ -172,6 +172,17 @@ public class Huffman {
         System.out.print(sb.toString());
     }
 
+    public static MinHeap criarMinHeap(int frequencies[]) {
+        MinHeap heap = new MinHeap();
+        for (int i = 0; i < frequencies.length; i++) {
+            if (frequencies[i] > 0) {
+                heap.insert(new No((char) i, frequencies[i]));
+            }
+        }
+
+        return heap;
+    }
+
     public static void codificar() {
         if (dicionarioGlobal == null) {
             System.out.println("Dicionário não gerado");
@@ -254,5 +265,162 @@ public class Huffman {
         sb.append("\n--------------------------------------------------");
 
         System.out.println(sb.toString());
+    }
+
+    private static byte[] transformarStringEmByte(String strBinaria) {
+        if(strBinaria == null || strBinaria.isEmpty())
+            return new byte[0];
+
+        ByteArrayOutputStream buffer = new ByteArrayOutputStream();
+        int len = strBinaria.length();
+
+        byte resultado = 0;
+        int bitPosicao = 7;
+
+        for(int i = 0; i < len; i++){
+
+            if(strBinaria.charAt(i) == '1'){
+                byte mascara = (byte) (1 << bitPosicao);
+                resultado = (byte) (resultado | mascara);
+            }
+            bitPosicao--;
+
+            if(bitPosicao < 0) {
+                buffer.write(resultado);
+                resultado = 0;
+                bitPosicao = 7;
+            }
+        }
+
+        if(bitPosicao != 7) {
+            buffer.write(resultado);
+        }
+
+        return buffer.toByteArray();
+    }
+
+    public static void criarArquivoHuff(int tabelaFrequencia[]) {
+        ByteArrayOutputStream buffer = new ByteArrayOutputStream();
+        Path path = Paths.get(ARQUIVOHUFFCOMPRIMIDO);
+
+        try {
+            if (!Files.exists(path)) {
+                Files.createFile(path);
+            }else {
+                Files.delete(path);
+            }
+        }catch (IOException ex) {
+            ex.printStackTrace();
+        }
+
+        try(DataOutputStream dataOutputStream = new DataOutputStream(buffer)) {
+            int numeroEntradas = 0;
+
+            for(int k = 0; k < TAM; k++)
+                if(tabelaFrequencia[k] > 0)
+                    numeroEntradas++;
+
+            dataOutputStream.writeInt(numeroEntradas);
+
+            for(int k = 0; k < TAM; k++) {
+                if(tabelaFrequencia[k] > 0) {
+
+                    int frequencia = tabelaFrequencia[k];
+                    dataOutputStream.writeByte(k);
+                    dataOutputStream.writeInt(frequencia);
+                }
+            }
+
+            dataOutputStream.flush();
+        }
+        catch (IOException e) {
+            e.printStackTrace();
+        }
+
+        long totalBits = bitsCodificadosGlobal.length();
+        byte[] dadosComprimidos = transformarStringEmByte(bitsCodificadosGlobal);
+
+        System.out.println("Bytes em decimal " + Arrays.toString(dadosComprimidos));
+
+        try(DataOutputStream out = new DataOutputStream(new FileOutputStream(path.toFile()))) {
+            out.write(buffer.toByteArray());
+            out.writeLong(totalBits);
+            out.write(dadosComprimidos);
+        }
+        catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
+
+    public static int verificarBit(byte b, int i) {
+        byte mascara = (byte)( 1 << i );
+        return (b & mascara);
+    }
+
+    public static String descomprimirArquivo(String caminhoArquivo) {
+
+        Path path = Paths.get(ARQUIVOHUFFCOMPRIMIDO);
+
+        try {
+            if (!Files.exists(path)) {
+                throw new FileNotFoundException();
+            }
+        }
+        catch (FileNotFoundException ex){
+            ex.printStackTrace();
+        }
+        catch (IOException ex) {
+            ex.printStackTrace();
+        }
+
+        StringBuilder sb = new StringBuilder();
+
+        try(DataInputStream inputStream = new DataInputStream(new FileInputStream(caminhoArquivo))) {
+
+            int tamanhoDoConteudo = inputStream.readInt();
+
+            if(tamanhoDoConteudo == 0)
+                return null; // Arquivo não tem nada codificado
+
+            int[] tabelaDeFrequencia = new int[TAM];
+            for(int j = 0; j < tamanhoDoConteudo; j ++) {
+
+                int simbolo = (char)inputStream.readUnsignedByte();
+                int frequencia = inputStream.readInt();
+
+                tabelaDeFrequencia[simbolo] = frequencia;
+                System.out.println(String.format("Freq. %c, %d", (char)simbolo, frequencia));
+            }
+
+            MinHeap heap = criarMinHeap(tabelaDeFrequencia);
+            raizGlobal = montarArvore(heap);
+
+            long totalBits = inputStream.readLong();
+            byte[] restante = inputStream.readAllBytes();
+
+            StringBuilder bitsString = new StringBuilder();
+            for (int i = 0; i < restante.length; i++) {
+                int bitsNoByte = (i == restante.length - 1) ? (int)(totalBits % 8) : 8;
+                if (bitsNoByte == 0) bitsNoByte = 8;
+
+                for (int j = 7; j >= 8 - bitsNoByte; j--) {
+                    boolean bit = ((restante[i] >> j) & 1) == 1;
+                    bitsString.append(bit ? '1' : '0');
+                }
+            }
+
+            System.out.println("Bits reconstruídos: " + bitsString.toString());
+
+            bitsCodificadosGlobal = bitsString.toString();
+            decodificar();
+
+            System.out.println(mensagemDecodificadaGlobal);
+        }
+        catch (IOException e) {
+            e.printStackTrace();
+        }
+
+        return sb.toString();
+
     }
 }
