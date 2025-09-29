@@ -56,8 +56,8 @@ if errorlevel 1 (
 )
 
 echo.
-echo Limpando arquivos temporarios...
-del teste.huff
-del teste_restaurado.txt
+REM echo Limpando arquivos temporarios...
+REM del teste.huff
+REM del teste_restaurado.txt
 
 echo.
