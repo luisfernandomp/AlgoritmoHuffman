@@ -3,14 +3,11 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.util.Arrays;
 
 public class Huffman {
     private static final int TAM = 256;
-    private static  final String ARQUIVOHUFFCOMPRIMIDO = "arquivo_comprimido.huff";
 
     // para o método codificar
-    private static  MinHeap minHeap;
     private static No raizGlobal = null;
     private static String[] dicionarioGlobal = null;
     private static String bitsCodificadosGlobal = null;
@@ -19,50 +16,96 @@ public class Huffman {
 
     // para o decodificador
     private static String mensagemDecodificadaGlobal = null;
+    private static String conteudoArquivoTexto;
+
+    /* Funções utilitárias */
+    public static File recuperarArquivo(String caminhoArquivo, boolean arquivoPrecisaExistir, boolean tentarCriarArquivo)
+            throws IOException {
+
+        if(!arquivoPrecisaExistir && !tentarCriarArquivo)
+            throw new IllegalArgumentException("É necessário que o arquivo exista");
+
+        Path path = Paths.get(caminhoArquivo);
+
+        if(arquivoPrecisaExistir) {
+            if (!Files.exists(path)) {
+                throw new FileNotFoundException(caminhoArquivo);
+            }
+        }
+        else {
+            Files.deleteIfExists(path);
+            Files.createFile(path);
+        }
+
+        return path.toFile();
+    }
+
 
     public static void main(String[] args) {
-        // análise de frequência e heap
-        int[] frequencies = analyze("input.txt");
+        try {
+            if(args.length == 0) {
+                System.out.println("Informe os parâmetros de entrada");
+                return;
+            }
 
-        if(frequencies != null){
-            printFrequencies(frequencies);
+            String nomeArquivoComprimido, nomeArquivoDescomprimido;
+            String acao = args[0].trim();
 
-            MinHeap heap = criarMinHeap(frequencies);
-            heap.printHeap();
+            switch (acao) {
+                case "-c" : {
+                    nomeArquivoComprimido = args[1].trim();
+                    nomeArquivoDescomprimido = args[2].trim();
 
-            No raiz = montarArvore(heap);
-            imprimirArvore(raiz);
-            String[] dicionario = new String[TAM];
-            gerarTabelaDeCodigos(dicionario, raiz, "");
+                    File arquivoComprimido = recuperarArquivo(nomeArquivoComprimido, true, false);
+                    File arquivoDescomprimido = recuperarArquivo(nomeArquivoDescomprimido, false, true);
 
-            imprimirTabelaDeCodigos(dicionario);
+                    comprimirArquivo(arquivoComprimido, arquivoDescomprimido);
+                    break;
+                }
+                case "-d" : {
+                    nomeArquivoComprimido = args[1].trim();
+                    nomeArquivoDescomprimido = args[2].trim();
 
-            raizGlobal = raiz;
-            dicionarioGlobal = dicionario;
-            codificar();
+                    File arquivoComprimido = recuperarArquivo(nomeArquivoComprimido, true, false);
+                    File arquivoDescomprimido = recuperarArquivo(nomeArquivoDescomprimido, false, true);
 
-            imprimirResumoCompressao();
-            criarArquivoHuff(frequencies);
-            descomprimirArquivo(ARQUIVOHUFFCOMPRIMIDO);
+                    descomprimirArquivo(arquivoComprimido, arquivoDescomprimido);
+                    break;
+                }
+                default: {
+                    System.out.println("Ação informada é inválida! Informe -c para compressão e -d para descompressão.");
+                    break;
+                }
+            }
+        }
+        catch (Exception ex) {
+            ex.printStackTrace();
         }
     }
 
-    public static int[] analyze(String filePath) {
-        try (FileInputStream fileInputStream = new FileInputStream(filePath);
-             InputStreamReader inputStreamReader = new InputStreamReader(fileInputStream, StandardCharsets.UTF_8);
-             BufferedReader leitor = new BufferedReader(inputStreamReader)) {
+    public static int[] analyze(File file) {
+        try (FileInputStream fileInputStream = new FileInputStream(file);
+            InputStreamReader inputStreamReader = new InputStreamReader(fileInputStream, StandardCharsets.UTF_8);
+            BufferedReader leitor = new BufferedReader(inputStreamReader)) {
 
+            StringBuilder sb = new StringBuilder();
             int[] frequencies = new int[TAM];
-
             int caractereLido;
+                    
             while ((caractereLido = leitor.read()) != -1) {
-                if(caractereLido >= 0 && caractereLido < TAM){
+                if (caractereLido >= 0 && caractereLido < TAM) {
                     frequencies[caractereLido]++;
+                    sb.append((char) caractereLido);
+                }
+                else {
+                    System.out.println("Caractere ignorado: " + (char)caractereLido);
                 }
             }
 
+            conteudoArquivoTexto = sb.toString();
             return frequencies;
-        } catch (IOException e) {
+        }
+        catch (IOException e) {
             e.printStackTrace();
             return null;
         }
@@ -75,40 +118,20 @@ public class Huffman {
         sb.append("\nETAPA 1: Tabela de Frequencia de Caracteres");
         sb.append("\n--------------------------------------------------");
 
+        String representacao;
         for (int i = 0; i < frequencies.length; i++) {
             if (frequencies[i] > 0) {
+                if(i == 10) representacao = "\\n";
+                else if(i == 13) representacao = "\\r";
+                else representacao = String.valueOf((char)i);
+
                 sb.append(
-                        String.format("\nCaractere '%c' (ASCII: %d): %d", (char)i, i, frequencies[i])
+                        String.format("\nCaractere '%s' (ASCII: %d): %d", representacao, i, frequencies[i])
                 );
             }
         }
 
-        System.out.println(sb.toString());
-    }
-
-    public static No montarArvore(MinHeap minHeap) {
-        No primeiro, segundo, novo;
-
-        while(minHeap.size() > 1) {
-            primeiro = minHeap.extractMin();
-            segundo = minHeap.extractMin();
-
-            int frequenciaNovoNo = primeiro.frequencie + segundo.frequencie;
-            novo = new No('\0', frequenciaNovoNo);
-            novo.left = primeiro;
-            novo.right = segundo;
-
-            minHeap.insert(novo);
-        }
-
-        return minHeap.peek();
-    }
-
-    private static String rotulo(No n, boolean eRaiz) {
-        boolean folha = (n.left == null && n.right == null);
-        if (eRaiz) return "(RAIZ, " + n.frequencie + ")";
-        else if (folha) return "('" + n.character + "', " + n.frequencie + ")";
-        else return "(N, " + n.frequencie + ")";
+        System.out.println(sb);
     }
 
     public static void imprimirArvore(No raiz) {
@@ -123,8 +146,15 @@ public class Huffman {
         if (n == null) return;
 
         boolean folha = (n.left == null && n.right == null);
+
+        String representacao;
+
+        if(n.character == '\n') representacao = "\\n";
+        else if(n.character == '\r') representacao = "\\r";
+        else representacao = String.valueOf(n.character);
+
         String rotulo = eRaiz ? "(RAIZ, " + n.frequencie + ")"
-                        : (folha ? "('" + n.character + "', " + n.frequencie + ")"
+                        : (folha ? "('" + representacao + "', " + n.frequencie + ")"
                                 : "(N, " + n.frequencie + ")");
 
         if (eRaiz) {
@@ -163,8 +193,13 @@ public class Huffman {
 
         for (int i = 0; i < dicionario.length; i++) {
             if(dicionario[i] != null) {
+                String representacao;
+                if(i == 10) representacao = "\\n";
+                else if(i == 13) representacao = "\\r";
+                else representacao = String.valueOf((char)i);
+
                 sb.append(
-                        String.format("\nCaractere '%c': %s", (char)i, dicionario[i])
+                        String.format("\nCaractere '%s': %s", representacao, dicionario[i])
                 );
             }
         }
@@ -189,23 +224,17 @@ public class Huffman {
             return;
         }
 
-        StringBuilder sb = new StringBuilder( 1 << 12);
+        StringBuilder sb = new StringBuilder(conteudoArquivoTexto.length());
         long qtdChars = 0;
+        int caractereLido = 0;
 
-        try (FileInputStream fileInputStream = new FileInputStream("input.txt");
-             InputStreamReader inputStreamReader = new InputStreamReader(fileInputStream, StandardCharsets.UTF_8);
-             BufferedReader leitor = new BufferedReader(inputStreamReader)) {
+        for(int i = 0, len = conteudoArquivoTexto.length(); i < len; i++) {
+            caractereLido = conteudoArquivoTexto.charAt(i);
 
-            int caractereLido;
-            while ((caractereLido = leitor.read()) != -1) {
-                if(caractereLido >= 0 && caractereLido < TAM){
-                    sb.append(dicionarioGlobal[caractereLido]);
-                    qtdChars++;
-                }
+            if(caractereLido < TAM){
+                sb.append(dicionarioGlobal[caractereLido]);
+                qtdChars++;
             }
-        } catch (IOException e) {
-            e.printStackTrace();
-            return;
         }
 
         bitsCodificadosGlobal = sb.toString();
@@ -299,88 +328,13 @@ public class Huffman {
         return buffer.toByteArray();
     }
 
-    public static void criarArquivoHuff(int tabelaFrequencia[]) {
-        ByteArrayOutputStream buffer = new ByteArrayOutputStream();
-        Path path = Paths.get(ARQUIVOHUFFCOMPRIMIDO);
-
-        try {
-            if (!Files.exists(path)) {
-                Files.createFile(path);
-            }else {
-                Files.delete(path);
-            }
-        }catch (IOException ex) {
-            ex.printStackTrace();
-        }
-
-        try(DataOutputStream dataOutputStream = new DataOutputStream(buffer)) {
-            int numeroEntradas = 0;
-
-            for(int k = 0; k < TAM; k++)
-                if(tabelaFrequencia[k] > 0)
-                    numeroEntradas++;
-
-            dataOutputStream.writeInt(numeroEntradas);
-
-            for(int k = 0; k < TAM; k++) {
-                if(tabelaFrequencia[k] > 0) {
-
-                    int frequencia = tabelaFrequencia[k];
-                    dataOutputStream.writeByte(k);
-                    dataOutputStream.writeInt(frequencia);
-                }
-            }
-
-            dataOutputStream.flush();
-        }
-        catch (IOException e) {
-            e.printStackTrace();
-        }
-
-        long totalBits = bitsCodificadosGlobal.length();
-        byte[] dadosComprimidos = transformarStringEmByte(bitsCodificadosGlobal);
-
-        System.out.println("Bytes em decimal " + Arrays.toString(dadosComprimidos));
-
-        try(DataOutputStream out = new DataOutputStream(new FileOutputStream(path.toFile()))) {
-            out.write(buffer.toByteArray());
-            out.writeLong(totalBits);
-            out.write(dadosComprimidos);
-        }
-        catch (IOException e) {
-            e.printStackTrace();
-        }
-    }
-
-    public static int verificarBit(byte b, int i) {
-        byte mascara = (byte)( 1 << i );
-        return (b & mascara);
-    }
-
-    public static String descomprimirArquivo(String caminhoArquivo) {
-
-        Path path = Paths.get(ARQUIVOHUFFCOMPRIMIDO);
-
-        try {
-            if (!Files.exists(path)) {
-                throw new FileNotFoundException();
-            }
-        }
-        catch (FileNotFoundException ex){
-            ex.printStackTrace();
-        }
-        catch (IOException ex) {
-            ex.printStackTrace();
-        }
-
-        StringBuilder sb = new StringBuilder();
-
-        try(DataInputStream inputStream = new DataInputStream(new FileInputStream(caminhoArquivo))) {
+    public static void descomprimirArquivo(File arquivoComprimido, File arquivoDescomprimido) {
+        try(DataInputStream inputStream = new DataInputStream(new FileInputStream(arquivoComprimido))) {
 
             int tamanhoDoConteudo = inputStream.readInt();
 
             if(tamanhoDoConteudo == 0)
-                return null; // Arquivo não tem nada codificado
+                return; // Arquivo não tem nada codificado
 
             int[] tabelaDeFrequencia = new int[TAM];
             for(int j = 0; j < tamanhoDoConteudo; j ++) {
@@ -389,11 +343,10 @@ public class Huffman {
                 int frequencia = inputStream.readInt();
 
                 tabelaDeFrequencia[simbolo] = frequencia;
-                System.out.println(String.format("Freq. %c, %d", (char)simbolo, frequencia));
             }
 
             MinHeap heap = criarMinHeap(tabelaDeFrequencia);
-            raizGlobal = montarArvore(heap);
+            raizGlobal = heap.montarArvore();
 
             long totalBits = inputStream.readLong();
             byte[] restante = inputStream.readAllBytes();
@@ -409,18 +362,84 @@ public class Huffman {
                 }
             }
 
-            System.out.println("Bits reconstruídos: " + bitsString.toString());
-
             bitsCodificadosGlobal = bitsString.toString();
             decodificar();
-
-            System.out.println(mensagemDecodificadaGlobal);
+            Files.writeString(arquivoDescomprimido.toPath(), mensagemDecodificadaGlobal);
         }
         catch (IOException e) {
             e.printStackTrace();
         }
+    }
 
-        return sb.toString();
+    public static void comprimirArquivo(File arquivoDescomprimido, File arquivoComprimido)
+    {
+        try {
+            int[] frequencies = analyze(arquivoDescomprimido);
 
+            if(frequencies == null) {
+                System.out.println("Não foi possível definir a frequência do texto!");
+                return;
+            }
+
+            printFrequencies(frequencies);
+            MinHeap heap = criarMinHeap(frequencies);
+            heap.printHeap();
+            No raiz = heap.montarArvore();
+            imprimirArvore(raiz);
+            String[] dicionario = new String[TAM];
+            gerarTabelaDeCodigos(dicionario, raiz, "");
+            imprimirTabelaDeCodigos(dicionario);
+            raizGlobal = raiz;
+            dicionarioGlobal = dicionario;
+            codificar();
+            imprimirResumoCompressao();
+
+            criarArquivoComprimido(frequencies, arquivoComprimido);
+
+        }
+        catch (Exception ex){
+            ex.printStackTrace();
+        }
+    }
+
+    public static void criarArquivoComprimido(int[] frequencies, File arquivoComprimido) {
+        ByteArrayOutputStream buffer = new ByteArrayOutputStream();
+
+        try(DataOutputStream dataOutputStream = new DataOutputStream(buffer)) {
+            int numeroEntradas = 0;
+
+            for(int k = 0; k < TAM; k++)
+                if(frequencies[k] > 0)
+                    numeroEntradas++;
+
+            dataOutputStream.writeInt(numeroEntradas);
+
+            for(int k = 0; k < TAM; k++) {
+                if(frequencies[k] > 0) {
+
+                    int frequencia = frequencies[k];
+                    dataOutputStream.writeByte(k);
+                    dataOutputStream.writeInt(frequencia);
+                }
+            }
+
+            dataOutputStream.flush();
+        }
+        catch (IOException e) {
+            e.printStackTrace();
+            return;
+        }
+
+        long totalBits = bitsCodificadosGlobal.length();
+        byte[] dadosComprimidos = transformarStringEmByte(bitsCodificadosGlobal);
+
+        try(DataOutputStream out = new DataOutputStream(new FileOutputStream(arquivoComprimido))) {
+            out.write(buffer.toByteArray());
+            out.writeLong(totalBits);
+            out.write(dadosComprimidos);
+        }
+        catch (IOException e) {
+            e.printStackTrace();
+        }
     }
 }
