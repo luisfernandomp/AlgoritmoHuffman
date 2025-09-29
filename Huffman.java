@@ -19,6 +19,9 @@ public class Huffman {
     private static String conteudoArquivoTexto;
 
     /* Funções utilitárias */
+
+    // Função usada para verificar se os arquivos informados são obrigatórios ou se eles existem
+    // Se forem obrigatório, porém não existirem, lançamos uma exeção
     public static File recuperarArquivo(String caminhoArquivo, boolean arquivoPrecisaExistir, boolean tentarCriarArquivo)
             throws IOException {
 
@@ -52,6 +55,7 @@ public class Huffman {
             String acao = args[0].trim();
 
             switch (acao) {
+                // Ação escolhida pelo usuário foi comprimir o arquivo
                 case "-c" : {
                     nomeArquivoComprimido = args[1].trim();
                     nomeArquivoDescomprimido = args[2].trim();
@@ -59,9 +63,12 @@ public class Huffman {
                     File arquivoComprimido = recuperarArquivo(nomeArquivoComprimido, true, false);
                     File arquivoDescomprimido = recuperarArquivo(nomeArquivoDescomprimido, false, true);
 
+                    System.nanoTime();
+
                     comprimirArquivo(arquivoComprimido, arquivoDescomprimido);
                     break;
                 }
+                // Ação escolhida pelo usuário foi descomprimir o arquivo
                 case "-d" : {
                     nomeArquivoComprimido = args[1].trim();
                     nomeArquivoDescomprimido = args[2].trim();
@@ -83,6 +90,11 @@ public class Huffman {
         }
     }
 
+    /*
+    * Função responsável por analisar o arquivo de entrada (txt), para realizar a contagem da frequência dos
+    * caracteres, e armezena isso num vetor de inteiros em que associamos o índice ASCII extendido do símbolo
+    * com a sua frequência
+    * */
     public static int[] analyze(File file) {
         try (FileInputStream fileInputStream = new FileInputStream(file);
             InputStreamReader inputStreamReader = new InputStreamReader(fileInputStream, StandardCharsets.UTF_8);
@@ -121,6 +133,9 @@ public class Huffman {
         String representacao;
         for (int i = 0; i < frequencies.length; i++) {
             if (frequencies[i] > 0) {
+                /* Aqui não imprimimos \n ou \r por questões de legibilidade da tabela
+                * para não termos quebra de linhas, então só exibimos a sua representação para o usuário
+                */
                 if(i == 10) representacao = "\\n";
                 else if(i == 13) representacao = "\\r";
                 else representacao = String.valueOf((char)i);
@@ -174,6 +189,12 @@ public class Huffman {
         }
     }
 
+    /* Função resposável por gerar a tabela de código, ou seja,
+     * ela atribui para cada símbolo usado no arquivo que será comprimido um código binário,
+     * fazendo isso de forma recursiva, para cada vez que andamos para direta somamos 0 e cada vez
+     * que andamos para esquerda 1, assim quando chegarmos no caractere em si (folha) teremos a sequência, o
+     * caminho feito para chegar até lá, esse será o código correspondente a esse símbolo.
+     */
     public static void gerarTabelaDeCodigos(String[] dicionario, No raiz, String caminho) {
         if(raiz.left  == null && raiz.right == null) {
             dicionario[(int)raiz.character] = caminho;
@@ -218,6 +239,10 @@ public class Huffman {
         return heap;
     }
 
+    /*
+    * Função responsável pela codificação, ou seja, responsável por pegar o código em si e transformar cada
+    * símbolo na sua representação binária
+    * */
     public static void codificar() {
         if (dicionarioGlobal == null) {
             System.out.println("Dicionário não gerado");
@@ -242,6 +267,12 @@ public class Huffman {
         comprimidoBits = bitsCodificadosGlobal.length();
     }
 
+    /*
+    * Função responsável pela decodificação do binário gerado pelo algoritmo de Huffman,
+    * ela percorrendo a árvore com cada 0 e 1 lidos, assim indo para direita ou esquerda da nossa árvore.
+    * E quando chegamos num nó folha achamos o caractere correspondente e podemos
+    * adicionar esse caractere a string do texto decodificado.
+    * */
     public static void decodificar() {
         if (raizGlobal == null || bitsCodificadosGlobal == null) {
             mensagemDecodificadaGlobal = null;
@@ -296,6 +327,10 @@ public class Huffman {
         System.out.println(sb.toString());
     }
 
+    /* Objetivo: transformar a mensagem codificada num array de bytes para que possamos salvar isso no
+    arquivo comprimido.
+
+    * */
     private static byte[] transformarStringEmByte(String strBinaria) {
         if(strBinaria == null || strBinaria.isEmpty())
             return new byte[0];
@@ -304,17 +339,30 @@ public class Huffman {
         int len = strBinaria.length();
 
         byte resultado = 0;
+        // Como cada byte tem 8 bits representantes precisamos saber a posição do bit que
+        // estamos no momento
         int bitPosicao = 7;
 
+        // Percorre cada binário da String
         for(int i = 0; i < len; i++){
 
             if(strBinaria.charAt(i) == '1'){
+                // Cria uma máscara de bits para ligar o bit na posição correta
+                //  (1 << 7) deslocamento para esquerda => 10000000
+                /* Como achamos um bit 1, queremo "ligar" ele na posição em que estamos
+                    lembrando que cada Byte ocupa 8 bits, por isso, percorremos iniciando do 7
+                    , bit mais significativo à esquerda.
+                    Assim deslocamos esse bit nessa posição e ligamos o resultado no byte resultado
+                    Então: se temos uma mascara 00010000 e um resultado 11000000, quando usamos o operador
+                    bit a bit | fazemos com que esse bit fique um no resultado também
+                * */
                 byte mascara = (byte) (1 << bitPosicao);
                 resultado = (byte) (resultado | mascara);
             }
             bitPosicao--;
 
             if(bitPosicao < 0) {
+                // Se chegamos na última posição escrevemos esse byte no nosso buffer
                 buffer.write(resultado);
                 resultado = 0;
                 bitPosicao = 7;
@@ -322,6 +370,8 @@ public class Huffman {
         }
 
         if(bitPosicao != 7) {
+            // Para casos em que o byte não soi completado, ou seja tem menos que 8 bits
+            // Assim garantimos que ele também será escrito no nosso buffer
             buffer.write(resultado);
         }
 
@@ -331,12 +381,19 @@ public class Huffman {
     public static void descomprimirArquivo(File arquivoComprimido, File arquivoDescomprimido) {
         try(DataInputStream inputStream = new DataInputStream(new FileInputStream(arquivoComprimido))) {
 
+            // Quantidade de pares que temos no arquivo
+            // Assim sabemos até que ponto temos a tabela de frequência e onde começa
+            // Nosso texto codificado
             int tamanhoDoConteudo = inputStream.readInt();
 
             if(tamanhoDoConteudo == 0)
                 return; // Arquivo não tem nada codificado
 
             int[] tabelaDeFrequencia = new int[TAM];
+
+            // Ler a tabela de frequência até determinada quantidade de pares presentes
+                // Ler o símbolo do byte
+                // Ler a frenquência
             for(int j = 0; j < tamanhoDoConteudo; j ++) {
 
                 int simbolo = (char)inputStream.readUnsignedByte();
@@ -345,18 +402,28 @@ public class Huffman {
                 tabelaDeFrequencia[simbolo] = frequencia;
             }
 
+            // Com a tabela de frequencia podemos criar nosso heap e depois montar a árvore
             MinHeap heap = criarMinHeap(tabelaDeFrequencia);
             raizGlobal = heap.montarArvore();
 
+            // O arquivo também armazena a quantidade total de bits da mensagem original.
+            // Isso é importante para saber exatamente onde a mensagem termina
             long totalBits = inputStream.readLong();
+
+            // Texto codificado, lê os bytes restantes no arquivo
             byte[] restante = inputStream.readAllBytes();
 
             StringBuilder bitsString = new StringBuilder();
-            for (int i = 0; i < restante.length; i++) {
+            for (int i = 0; i < restante.length; i++) { // Percorremos cada byte do que foi lido
+
+                // Para sabermos quantos bits existem no último byte ( só cai aqui quando entramos no último Byte)
                 int bitsNoByte = (i == restante.length - 1) ? (int)(totalBits % 8) : 8;
                 if (bitsNoByte == 0) bitsNoByte = 8;
 
+                // Percorremos até a quantidade de bits que existe no bit, começando pelo bit mais significavo
                 for (int j = 7; j >= 8 - bitsNoByte; j--) {
+                    // usamos deslocamento com int j (máscara) para determinarmos se aquele é um bit 0 ou 1
+                    // Assim incrementamos a String o que foi lido
                     boolean bit = ((restante[i] >> j) & 1) == 1;
                     bitsString.append(bit ? '1' : '0');
                 }
@@ -408,6 +475,10 @@ public class Huffman {
         try(DataOutputStream dataOutputStream = new DataOutputStream(buffer)) {
             int numeroEntradas = 0;
 
+            // Cabeçalho será salvo da seguinte forma
+            // 1 - Inteiro com a quantidade de pares que tem a tabela de frequência (Inteiro 4 bytes)
+            // 2 - Inteiro [0 - 255] representando o símbolo (1 byte)
+            // 3 - Inteiro representando a frequência (Inteiro 4 bytes)
             for(int k = 0; k < TAM; k++)
                 if(frequencies[k] > 0)
                     numeroEntradas++;
@@ -433,6 +504,8 @@ public class Huffman {
         long totalBits = bitsCodificadosGlobal.length();
         byte[] dadosComprimidos = transformarStringEmByte(bitsCodificadosGlobal);
 
+        // Escrevemos no arquivo primeiro o nosso cabeçalho com a tabela de frequência
+        // Depois salvamos nosso texto codificado (que precisou ser transformado em bytes)
         try(DataOutputStream out = new DataOutputStream(new FileOutputStream(arquivoComprimido))) {
             out.write(buffer.toByteArray());
             out.writeLong(totalBits);
